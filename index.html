@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>AI-Powered Cyberattack Protection Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.5.0/dist/socket.io.js"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #e0e7ff, #a5b4fc);
+            font-family: Arial, sans-serif;
+        }
+
+        .card {
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .log-item {
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 5px;
+            color: white;
+        }
+
+        .blocked {
+            background: #dc3545;
+        }
+
+        .allowed {
+            background: #28a745;
+        }
+    </style>
+</head>
+
+<body class="container mt-5">
+    <h1 class="text-center mb-4">AI Cyberattack Protection Dashboard</h1>
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card p-4">
+                <h3>Real-Time Detection Stats</h3>
+                <canvas id="pieChart" height="200"></canvas>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card p-4">
+                <h3>Live Detection Log</h3>
+                <div id="log" style="max-height: 300px; overflow-y: auto;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io('http://127.0.0.1:5000');
+        const ctx = document.getElementById('pieChart').getContext('2d');
+        const pieChart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: ['Blocked', 'Allowed'],
+                datasets: [{
+                    data: [0, 0],
+                    backgroundColor: ['#dc3545', '#28a745'],
+                    borderColor: '#fff',
+                    borderWidth: 2
+                }]
+            },
+            options: { responsive: true, plugins: { legend: { position: 'top' } } }
+        });
+
+        socket.on('update', (data) => {
+            pieChart.data.datasets[0].data = [data.stats.blocked, data.stats.allowed];
+            pieChart.update();
+            const log = document.getElementById('log');
+            const item = document.createElement('div');
+            item.classList.add('log-item', data.log.includes('Blocked') ? 'blocked' : 'allowed');
+            item.textContent = data.log;
+            log.prepend(item);
+            if (log.children.length > 10) log.removeChild(log.lastChild);
+        });
+    </script>
+</body>
+
+</html>
