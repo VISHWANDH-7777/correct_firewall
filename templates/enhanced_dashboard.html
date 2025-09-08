@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced AI Firewall Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.5.0/dist/socket.io.js"></script>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --success-color: #10b981;
+            --danger-color: #ef4444;
+            --warning-color: #f59e0b;
+            --info-color: #06b6d4;
+            --dark-color: #1f2937;
+            --light-color: #f8fafc;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+        }
+
+        .dashboard-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            margin: 20px;
+            padding: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary-color), var(--info-color));
+        }
+
+        .stat-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+            margin-bottom: 15px;
+        }
+
+        .attack-card {
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            border-left: 5px solid var(--danger-color);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .attack-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(239, 68, 68, 0.2);
+        }
+
+        .benign-card {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            border-left: 5px solid var(--success-color);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .benign-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(16, 185, 129, 0.2);
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .log-container {
+            background: var(--dark-color);
+            border-radius: 15px;
+            padding: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+        }
+
+        .log-entry {
+            padding: 8px 12px;
+            margin-bottom: 5px;
+            border-radius: 8px;
+            font-size: 14px;
+            animation: slideIn 0.3s ease;
+        }
+
+        .log-blocked {
+            background: rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
+            border-left: 3px solid var(--danger-color);
+        }
+
+        .log-allowed {
+            background: rgba(16, 185, 129, 0.2);
+            color: #86efac;
+            border-left: 3px solid var(--success-color);
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .attack-type-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-right: 5px;
+        }
+
+        .badge-ddos { background: #fee2e2; color: #dc2626; }
+        .badge-port-scan { background: #fef3c7; color: #d97706; }
+        .badge-brute-force { background: #ede9fe; color: #7c3aed; }
+        .badge-web-attack { background: #fce7f3; color: #be185d; }
+        .badge-infiltration { background: #f3e8ff; color: #8b5cf6; }
+
+        .confidence-bar {
+            height: 6px;
+            background: #e5e7eb;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #10b981, #059669);
+            transition: width 0.3s ease;
+        }
+
+        .detection-details {
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        .navbar-custom {
+            background: linear-gradient(135deg, #1f2937 0%, #374151 100%);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-custom {
+            background: linear-gradient(135deg, var(--primary-color), var(--info-color));
+            border: none;
+            border-radius: 25px;
+            padding: 10px 25px;
+            color: white;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-custom:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(37, 99, 235, 0.3);
+            color: white;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-online { background: var(--success-color); }
+        .status-offline { background: var(--danger-color); }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-custom">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-shield-alt me-2"></i>
+                Enhanced AI Firewall
+            </a>
+            <div class="navbar-nav ms-auto">
+                <span class="navbar-text">
+                    <span class="status-indicator status-online"></span>
+                    System Online
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <div class="dashboard-container">
+            <!-- Header -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h1 class="display-4 text-center mb-0">
+                        <i class="fas fa-shield-alt text-primary me-3"></i>
+                        AI Cybersecurity Dashboard
+                    </h1>
+                    <p class="text-center text-muted">Real-time network intrusion detection and prevention</p>
+                </div>
+            </div>
+
+            <!-- Statistics Cards -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card stat-card">
+                        <div class="card-body text-center">
+                            <div class="stat-icon mx-auto" style="background: linear-gradient(135deg, #3b82f6, #1d4ed8);">
+                                <i class="fas fa-network-wired"></i>
+                            </div>
+                            <h3 class="card-title" id="total-traffic">0</h3>
+                            <p class="card-text text-muted">Total Traffic</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card stat-card">
+                        <div class="card-body text-center">
+                            <div class="stat-icon mx-auto" style="background: linear-gradient(135deg, #10b981, #059669);">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <h3 class="card-title text-success" id="allowed-traffic">0</h3>
+                            <p class="card-text text-muted">Allowed</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card stat-card">
+                        <div class="card-body text-center">
+                            <div class="stat-icon mx-auto" style="background: linear-gradient(135deg, #ef4444, #dc2626);">
+                                <i class="fas fa-ban"></i>
+                            </div>
+                            <h3 class="card-title text-danger" id="blocked-traffic">0</h3>
+                            <p class="card-text text-muted">Blocked</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card stat-card">
+                        <div class="card-body text-center">
+                            <div class="stat-icon mx-auto" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
+                                <i class="fas fa-percentage"></i>
+                            </div>
+                            <h3 class="card-title text-warning" id="block-rate">0%</h3>
+                            <p class="card-text text-muted">Block Rate</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="chart-container">
+                        <h5 class="mb-3">
+                            <i class="fas fa-chart-pie me-2"></i>
+                            Traffic Distribution
+                        </h5>
+                        <canvas id="trafficChart" height="300"></canvas>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="chart-container">
+                        <h5 class="mb-3">
+                            <i class="fas fa-chart-bar me-2"></i>
+                            Attack Types
+                        </h5>
+                        <canvas id="attackChart" height="300"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Real-time Detection and Logs -->
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-stream me-2"></i>
+                                Real-time Detection Log
+                            </h5>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="log-container" id="detection-log">
+                                <div class="text-center text-muted py-4">
+                                    <i class="fas fa-clock fa-2x mb-3"></i>
+                                    <p>Waiting for network traffic...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                Recent Attacks
+                            </h5>
+                        </div>
+                        <div class="card-body" id="recent-attacks" style="max-height: 400px; overflow-y: auto;">
+                            <div class="text-center text-muted py-4">
+                                <i class="fas fa-shield-alt fa-2x mb-3"></i>
+                                <p>No attacks detected</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Test Controls -->
+            <div class="row mt-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-vial me-2"></i>
+                                Attack Simulation Controls
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <p class="text-muted mb-3">Test the firewall's detection capabilities with simulated attacks:</p>
+                                    <div class="btn-group me-2 mb-2" role="group">
+                                        <button type="button" class="btn btn-outline-danger" onclick="simulateAttack('ddos')">
+                                            <i class="fas fa-bolt me-1"></i> DDoS
+                                        </button>
+                                        <button type="button" class="btn btn-outline-warning" onclick="simulateAttack('port_scan')">
+                                            <i class="fas fa-search me-1"></i> Port Scan
+                                        </button>
+                                        <button type="button" class="btn btn-outline-info" onclick="simulateAttack('brute_force')">
+                                            <i class="fas fa-key me-1"></i> Brute Force
+                                        </button>
+                                    </div>
+                                    <div class="btn-group me-2 mb-2" role="group">
+                                        <button type="button" class="btn btn-outline-primary" onclick="simulateAttack('web_attack')">
+                                            <i class="fas fa-globe me-1"></i> Web Attack
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary" onclick="simulateAttack('infiltration')">
+                                            <i class="fas fa-user-secret me-1"></i> Infiltration
+                                        </button>
+                                        <button type="button" class="btn btn-outline-success" onclick="simulateAttack('benign')">
+                                            <i class="fas fa-check me-1"></i> Benign Traffic
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <button type="button" class="btn btn-custom w-100 mb-2" onclick="simulateMultipleAttacks()">
+                                        <i class="fas fa-rocket me-2"></i>
+                                        Launch Multiple Attacks
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary w-100" onclick="clearLogs()">
+                                        <i class="fas fa-trash me-2"></i>
+                                        Clear Logs
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Socket.IO
+        const socket = io('http://127.0.0.1:5000');
+
+        // Chart configurations
+        const trafficChart = new Chart(document.getElementById('trafficChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Allowed', 'Blocked'],
+                datasets: [{
+                    data: [0, 0],
+                    backgroundColor: ['#10b981', '#ef4444'],
+                    borderWidth: 0,
+                    hoverOffset: 10
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            usePointStyle: true
+                        }
+                    }
+                }
+            }
+        });
+
+        const attackChart = new Chart(document.getElementById('attackChart'), {
+            type: 'bar',
+            data: {
+                labels: ['DDoS', 'Port Scan', 'Brute Force', 'Web Attack', 'Infiltration'],
+                datasets: [{
+                    label: 'Attacks Detected',
+                    data: [0, 0, 0, 0, 0],
+                    backgroundColor: [
+                        '#ef4444',
+                        '#f59e0b',
+                        '#8b5cf6',
+                        '#ec4899',
+                        '#6366f1'
+                    ],
+                    borderRadius: 8,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                }
+            }
+        });
+
+        // Socket event handlers
+        socket.on('detection_update', function(data) {
+            updateDashboard(data.stats);
+            addLogEntry(data.latest_detection);
+            updateRecentAttacks(data.stats.recent_attacks);
+        });
+
+        // Update dashboard statistics
+        function updateDashboard(stats) {
+            document.getElementById('total-traffic').textContent = stats.total;
+            document.getElementById('allowed-traffic').textContent = stats.allowed;
+            document.getElementById('blocked-traffic').textContent = stats.blocked;
+            
+            const blockRate = stats.total > 0 ? ((stats.blocked / stats.total) * 100).toFixed(1) : 0;
+            document.getElementById('block-rate').textContent = blockRate + '%';
+
+            // Update charts
+            trafficChart.data.datasets[0].data = [stats.allowed, stats.blocked];
+            trafficChart.update();
+
+            const attackData = [
+                stats.attack_types.DDOS || 0,
+                stats.attack_types.PORT_SCAN || 0,
+                stats.attack_types.BRUTE_FORCE || 0,
+                stats.attack_types.WEB_ATTACK || 0,
+                stats.attack_types.INFILTRATION || 0
+            ];
+            attackChart.data.datasets[0].data = attackData;
+            attackChart.update();
+        }
+
+        // Add log entry
+        function addLogEntry(detection) {
+            const logContainer = document.getElementById('detection-log');
+            const logEntry = document.createElement('div');
+            
+            const isBlocked = detection.prediction !== 'BENIGN';
+            const timestamp = new Date(detection.timestamp).toLocaleTimeString();
+            
+            logEntry.className = `log-entry ${isBlocked ? 'log-blocked' : 'log-allowed'}`;
+            
+            let detailsHtml = '';
+            if (isBlocked && detection.detection_details) {
+                const confidence = Math.max(...Object.values(detection.detection_details.confidence_scores || {})) * 100;
+                detailsHtml = `
+                    <div class="detection-details">
+                        <strong>Detection Details:</strong><br>
+                        <small>Confidence: ${confidence.toFixed(1)}%</small><br>
+                        <small>ML Results: ${JSON.stringify(detection.detection_details.ml_results)}</small>
+                    </div>
+                `;
+            }
+            
+            logEntry.innerHTML = `
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <strong>[${timestamp}]</strong> 
+                        ${isBlocked ? 
+                            `<span class="attack-type-badge badge-${detection.prediction.toLowerCase().replace('_', '-')}">${detection.prediction}</span> BLOCKED` : 
+                            'BENIGN TRAFFIC ALLOWED'
+                        }
+                        <br>
+                        <small>${detection.firewall_action.message}</small>
+                        ${detailsHtml}
+                    </div>
+                    <i class="fas ${isBlocked ? 'fa-ban text-danger' : 'fa-check text-success'}"></i>
+                </div>
+            `;
+            
+            // Clear "waiting" message if it exists
+            if (logContainer.querySelector('.text-center')) {
+                logContainer.innerHTML = '';
+            }
+            
+            logContainer.insertBefore(logEntry, logContainer.firstChild);
+            
+            // Keep only last 20 entries
+            while (logContainer.children.length > 20) {
+                logContainer.removeChild(logContainer.lastChild);
+            }
+        }
+
+        // Update recent attacks
+        function updateRecentAttacks(recentAttacks) {
+            const container = document.getElementById('recent-attacks');
+            
+            if (!recentAttacks || recentAttacks.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-shield-alt fa-2x mb-3"></i>
+                        <p>No attacks detected</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = '';
+            recentAttacks.slice(0, 10).forEach(attack => {
+                const attackCard = document.createElement('div');
+                attackCard.className = 'attack-card';
+                
+                const timestamp = new Date(attack.timestamp).toLocaleString();
+                attackCard.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="attack-type-badge badge-${attack.type.toLowerCase().replace('_', '-')}">${attack.type}</span>
+                            <br>
+                            <small class="text-muted">${timestamp}</small>
+                        </div>
+                        <i class="fas fa-exclamation-triangle text-danger"></i>
+                    </div>
+                `;
+                container.appendChild(attackCard);
+            });
+        }
+
+        // Attack simulation functions
+        const attackPatterns = {
+            ddos: {
+                'Flow Duration': () => Math.floor(Math.random() * 490) + 10,
+                'Total Fwd Packets': () => Math.floor(Math.random() * 900) + 100,
+                'Total Backward Packets': () => Math.floor(Math.random() * 10),
+                'Fwd Packet Length Total': () => Math.floor(Math.random() * 450) + 50,
+                'Flow Bytes/s': () => Math.floor(Math.random() * 90000) + 10000,
+                'Flow Packets/s': () => Math.floor(Math.random() * 450) + 50,
+                'SYN Flag Count': () => Math.floor(Math.random() * 150) + 50,
+                'Protocol': () => ['TCP', 'UDP', 'ICMP'][Math.floor(Math.random() * 3)]
+            },
+            port_scan: {
+                'Flow Duration': () => Math.floor(Math.random() * 9000) + 1000,
+                'Total Fwd Packets': () => Math.floor(Math.random() * 4) + 1,
+                'Total Backward Packets': () => Math.floor(Math.random() * 2),
+                'Fwd Packet Length Total': () => Math.floor(Math.random() * 160) + 40,
+                'Flow Bytes/s': () => Math.floor(Math.random() * 4900) + 100,
+                'SYN Flag Count': () => Math.floor(Math.random() * 2) + 1,
+                'Protocol': () => 'TCP'
+            },
+            brute_force: {
+                'Flow Duration': () => Math.floor(Math.random() * 25000) + 5000,
+                'Total Fwd Packets': () => Math.floor(Math.random() * 40) + 10,
+                'Total Backward Packets': () => Math.floor(Math.random() * 20) + 5,
+                'Fwd Packet Length Total': () => Math.floor(Math.random() * 1500) + 500,
+                'Flow Bytes/s': () => Math.floor(Math.random() * 19000) + 1000,
+                'PSH Flag Count': () => Math.floor(Math.random() * 15) + 5,
+                'Protocol': () => 'TCP'
+            },
+            web_attack: {
+                'Flow Duration': () => Math.floor(Math.random() * 14000) + 1000,
+                'Total Fwd Packets': () => Math.floor(Math.random() * 25) + 5,
+                'Total Backward Packets': () => Math.floor(Math.random() * 17) + 3,
+                'Fwd Packet Length Total': () => Math.floor(Math.random() * 2700) + 300,
+                'Flow Bytes/s': () => Math.floor(Math.random() * 28000) + 2000,
+                'PSH Flag Count': () => Math.floor(Math.random() * 12) + 3,
+                'Protocol': () => 'TCP'
+            },
+            infiltration: {
+                'Flow Duration': () => Math.floor(Math.random() * 50000) + 10000,
+                'Total Fwd Packets': () => Math.floor(Math.random() * 80) + 20,
+                'Total Backward Packets': () => Math.floor(Math.random() * 65) + 15,
+                'Fwd Packet Length Total': () => Math.floor(Math.random() * 9000) + 1000,
+                'Flow Bytes/s': () => Math.floor(Math.random() * 9500) + 500,
+                'PSH Flag Count': () => Math.floor(Math.random() * 40) + 10,
+                'Protocol': () => 'TCP'
+            },
+            benign: {
+                'Flow Duration': () => Math.floor(Math.random() * 299000) + 1000,
+                'Total Fwd Packets': () => Math.floor(Math.random() * 49) + 1,
+                'Total Backward Packets': () => Math.floor(Math.random() * 39) + 1,
+                'Fwd Packet Length Total': () => Math.floor(Math.random() * 4950) + 50,
+                'Flow Bytes/s': () => Math.floor(Math.random() * 49900) + 100,
+                'PSH Flag Count': () => Math.floor(Math.random() * 10),
+                'Protocol': () => ['TCP', 'UDP', 'HTTP', 'HTTPS'][Math.floor(Math.random() * 4)]
+            }
+        };
+
+        function simulateAttack(attackType) {
+            const pattern = attackPatterns[attackType];
+            if (!pattern) return;
+
+            const packet = {};
+            for (const [feature, generator] of Object.entries(pattern)) {
+                packet[feature] = generator();
+            }
+
+            // Add some additional common features with defaults
+            const additionalFeatures = {
+                'Bwd Packet Length Total': Math.floor(Math.random() * 1000) + 50,
+                'Flow IAT Mean': Math.floor(Math.random() * 1000) + 10,
+                'Fwd IAT Mean': Math.floor(Math.random() * 800) + 10,
+                'Bwd IAT Mean': Math.floor(Math.random() * 600) + 10,
+                'Fwd PSH Flags': Math.floor(Math.random() * 10),
+                'Bwd PSH Flags': Math.floor(Math.random() * 8),
+                'Fwd Header Length': Math.floor(Math.random() * 980) + 20,
+                'Bwd Header Length': Math.floor(Math.random() * 780) + 20,
+                'Min Packet Length': Math.floor(Math.random() * 480) + 20,
+                'Max Packet Length': Math.floor(Math.random() * 1400) + 100,
+                'Packet Length Mean': Math.floor(Math.random() * 1140) + 60,
+                'FIN Flag Count': Math.floor(Math.random() * 10),
+                'ACK Flag Count': Math.floor(Math.random() * 40) + 1,
+                'Average Packet Size': Math.floor(Math.random() * 1140) + 60
+            };
+
+            Object.assign(packet, additionalFeatures);
+
+            fetch('/api/predict', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(packet)
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Attack simulation result:', data);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
+
+        function simulateMultipleAttacks() {
+            const attackTypes = ['ddos', 'port_scan', 'brute_force', 'web_attack', 'infiltration', 'benign'];
+            let delay = 0;
+
+            // Simulate 20 attacks with random types
+            for (let i = 0; i < 20; i++) {
+                setTimeout(() => {
+                    const randomType = attackTypes[Math.floor(Math.random() * attackTypes.length)];
+                    simulateAttack(randomType);
+                }, delay);
+                delay += Math.random() * 1000 + 200; // Random delay between 200-1200ms
+            }
+        }
+
+        function clearLogs() {
+            document.getElementById('detection-log').innerHTML = `
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-clock fa-2x mb-3"></i>
+                    <p>Waiting for network traffic...</p>
+                </div>
+            `;
+        }
+
+        // Load initial stats
+        fetch('/api/stats')
+            .then(response => response.json())
+            .then(data => {
+                updateDashboard(data);
+                updateRecentAttacks(data.recent_attacks);
+            })
+            .catch(error => console.error('Error loading stats:', error));
+    </script>
+</body>
+</html>
